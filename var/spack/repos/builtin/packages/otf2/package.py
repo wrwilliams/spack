@@ -57,6 +57,9 @@ class Otf2(AutotoolsPackage):
     # when using Cray's cs-prgenv, allow the build system to detect the systems as an XC
     patch("cray_ac_scorep_sys_detection-m4.patch", when="@2.2 %cce")
 
+    variant("python", default=True, description="Build Python bindings")
+    depends_on("python@3:", when="+python")
+
     @property
     def force_autoreconf(self):
         return self.spec.satisfies("@2.2 %cce")
@@ -70,5 +73,5 @@ class Otf2(AutotoolsPackage):
             "FC={0}".format(spack_fc),
             "CFLAGS={0}".format(self.compiler.cc_pic_flag),
             "CXXFLAGS={0}".format(self.compiler.cxx_pic_flag),
-            "PYTHON_FOR_GENERATOR=:",
+            "PYTHON_FOR_GENERATOR={0}".format(self.spec["python"].prefix.bin),
         ]
