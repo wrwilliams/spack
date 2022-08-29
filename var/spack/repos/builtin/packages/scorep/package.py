@@ -6,7 +6,7 @@
 from spack.package import *
 
 
-class Scorep(AutotoolsPackage):
+class Scorep(AutotoolsPackage, CudaPackage, RocmPackage):
     """The Score-P measurement infrastructure is a highly scalable and
     easy-to-use tool suite for profiling, event tracing, and online analysis
     of HPC applications.
@@ -15,6 +15,10 @@ class Scorep(AutotoolsPackage):
     homepage = "https://www.vi-hps.org/projects/score-p"
     url = "https://perftools.pages.jsc.fz-juelich.de/cicd/scorep/tags/scorep-7.1/scorep-7.1.tar.gz"
 
+    version("develop", url="https://perftools.pages.jsc.fz-juelich.de/cicd/scorep/branches/MR47/sources.332303db.tar.gz", 
+            sha256="b07c6ab63b0dafb94c2e21c963f71fed19d1fd41d1aeb37e7ed24bf8101a8e99")
+    version("master", url="https://perftools.pages.jsc.fz-juelich.de/cicd/scorep/branches/master/sources.bf9cbd03.tar.gz",
+            sha256="f38a0db76967a46fdd4f3f5c929a3136ced5515099f593664094cfe5ff4620ad")
     version("7.1", sha256="98dea497982001fb82da3429ca55669b2917a0858c71abe2cfe7cd113381f1f7")
     version("7.0", sha256="68f24a68eb6f94eaecf500e17448f566031946deab74f2cba072ee8368af0996")
     version("6.0", sha256="5dc1023eb766ba5407f0b5e0845ec786e0021f1da757da737db1fb71fc4236b8")
@@ -45,15 +49,21 @@ class Scorep(AutotoolsPackage):
     variant("pdt", default=False, description="Enable PDT")
     variant("shmem", default=False, description="Enable shmem tracing")
     variant("unwind", default=False, description="Enable sampling via libunwind and lib wrapping")
-
+    variant("cuda", default=False, description="Enable CUDA support")
+    variant("hip", default=False, when='@develop:', description="Enable ROCm support")
     # Dependencies for SCORE-P are quite tight. See the homepage for more
     # information. Starting with scorep 4.0 / cube 4.4, Score-P only depends on
     # two components of cube -- cubew and cubelib.
 
+    # DEVELOPMENT
+    depends_on("otf2@3:", when="@master:")
+    depends_on("cubew@4.7:", when="@master:")
+    depends_on("cubelib@4.7:", when="@master:")
+    
     # SCOREP 7
-    depends_on("otf2@2.3:2.3.99", when="@7:")
-    depends_on("cubew@4.6:", when="@7:")
-    depends_on("cubelib@4.6:", when="@7:")
+    depends_on("otf2@2.3:2.3.99", when="@7:master")
+    depends_on("cubew@4.6:", when="@7:master")
+    depends_on("cubelib@4.6:", when="@7:master")
     depends_on("opari2@2.0.6:", when="@7:")
     # SCOREP 6
     depends_on("otf2@2.2:", when="@6:")
@@ -84,6 +94,10 @@ class Scorep(AutotoolsPackage):
     depends_on("llvm", when="+unwind")
     depends_on("libunwind", when="+unwind")
 
+    depends_on('hip', when="+hip")
+    depends_on('roctracer-dev', when="+hip")
+    depends_on('rocprofiler-dev', when="+hip")
+
     # Score-P requires a case-sensitive file system, and therefore
     # does not work on macOS
     # https://github.com/spack/spack/issues/1609
@@ -97,9 +111,6 @@ class Scorep(AutotoolsPackage):
             "--with-opari2=%s" % spec["opari2"].prefix.bin,
             "--enable-shared",
         ]
-
-        cname = spec.compiler.name
-        config_args.append("--with-nocross-compiler-suite={0}".format(cname))
 
         if self.version >= Version("4.0"):
             config_args.append("--with-cubew=%s" % spec["cubew"].prefix.bin)
@@ -118,30 +129,5 @@ class Scorep(AutotoolsPackage):
             config_args.append("--with-libunwind=%s" % spec["libunwind"].prefix)
 
         config_args += self.with_or_without("shmem")
-        config_args += self.with_or_without("mpi")
-
-        if spec.satisfies("^intel-mpi"):
-            config_args.append("--with-mpi=intel3")
-        elif spec.satisfies("^mpich") or spec.satisfies("^mvapich2"):
-            config_args.append("--with-mpi=mpich3")
-        elif spec.satisfies("^openmpi"):
-            config_args.append("--with-mpi=openmpi")
-
-        config_args.extend(
-            [
-                "CFLAGS={0}".format(self.compiler.cc_pic_flag),
-                "CXXFLAGS={0}".format(self.compiler.cxx_pic_flag),
-            ]
-        )
-
-        if "+mpi" in spec:
-            config_args.extend(
-                [
-                    "MPICC={0}".format(spec["mpi"].mpicc),
-                    "MPICXX={0}".format(spec["mpi"].mpicxx),
-                    "MPIF77={0}".format(spec["mpi"].mpif77),
-                    "MPIFC={0}".format(spec["mpi"].mpifc),
-                ]
-            )
 
         return config_args
