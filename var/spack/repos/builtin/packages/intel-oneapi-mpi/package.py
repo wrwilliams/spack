@@ -163,6 +163,12 @@ class IntelOneapiMpi(IntelOneApiLibraryPackage):
     )
     depends_on("libfabric", when="+external-libfabric", type=("link", "run"))
 
+    variant(
+        "rebuild-f08-bindings",
+        default=False,
+        description="Rebuild the F08 bindings"
+    )
+    depends_on("gmake", when="+rebuild-f08-bindings", type=("build"))
     provides("mpi@:3.1")
     conflicts("+generic-names +classic-names")
 
@@ -243,6 +249,31 @@ class IntelOneapiMpi(IntelOneApiLibraryPackage):
 
         return libs
 
+    
+    @run_after("install")
+    def fix_f08_bindings(self):
+        # Rebuild Fortran 2008 bindings if requested.
+        # For more information, see:
+        # https://community.intel.com/t5/Intel-MPI-Library/MPI-f08-with-polymorphic-argument-CLASS/m-p/1590421
+        # Check if the binding tarball exists within the installation
+        with when("+rebuild-f08-bindings"):
+            bindings_tarball = self.prefix.mpi.latest.opt.mpi.binding.join('intel-mpi-binding-kit.tar.gz')
+            if not can_access(bindings_tarball):
+                raise InstallError(
+                    f"Requested to rebuild Fortran 2008 bindings, but the bindings tarball in {bindings_tarball} "
+                    f"does not exist.")
+            # Extract the tarball
+            tar = which("tar")
+            with working_dir(self.prefix.mpi.latest.opt.mpi.binding):
+                tar("-xzf", bindings_tarball)
+                # Build the bindings
+                with working_dir(self.prefix.mpi.latest.opt.mpi.binding.f08):
+                    make(f"MPI_INST={self.prefix.mpi.latest}", "F90=ifx", "NAME=ifx", "VERBOSE=1")
+            mkdirp(self.prefix.mpi.latest.include.mpi.back)
+            install(self.prefix.mpi.latest.include.mpi.join("*.mod"), self.prefix.mpi.latest.include.mpi.back)
+            install(self.prefix.mpi.latest.opt.mpi.binding.f08.include.ifx.join("*.mod"), self.prefix.mpi.latest.include.mpi)
+
+        
     @run_after("install")
     def fix_wrappers(self):
         # When spack builds from source
